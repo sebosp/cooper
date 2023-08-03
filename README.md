@@ -4,5 +4,5 @@ Nannou starcraft 2 visualizations
 
 ## Building
 ```
-trunk build --public-url https://sebosp.github.io/nannou-sc2/
+trunk build --public-url nannou-sc2/
 ```
