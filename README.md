@@ -1,4 +1,5 @@
-# nannou-sc2
+# nannou-sc2 0.0.1
+
 Nannou starcraft 2 visualizations
 
 
