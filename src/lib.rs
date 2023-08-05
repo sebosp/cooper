@@ -1,29 +1,29 @@
-extern crate base64;
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
 use gloo::file::callbacks::FileReader;
 use gloo::file::File;
+use gloo_console::log;
 use nom_mpq::parser;
 use s2protocol::versions::read_details;
 use std::collections::HashMap;
+use wasm_bindgen::JsError;
 use web_sys::{DragEvent, Event, FileList, HtmlInputElement};
 use yew::html::TargetCast;
 use yew::{html, Callback, Component, Context, Html};
 
-struct FileDetails {
+struct ProcessedReplay {
     name: String,
-    file_type: String,
+    mpq: nom_mpq::MPQ,
+    details: s2protocol::details::Details,
     data: Vec<u8>,
 }
 
 pub enum Msg {
-    Loaded(String, String, Vec<u8>),
+    Loaded(String, Vec<u8>),
     Files(Vec<File>),
 }
 
 pub struct App {
     readers: HashMap<String, FileReader>,
-    files: Vec<FileDetails>,
+    files: Vec<ProcessedReplay>,
 }
 
 impl Component for App {
@@ -39,10 +39,20 @@ impl Component for App {
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Msg::Loaded(file_name, file_type, data) => {
-                self.files.push(FileDetails {
+            Msg::Loaded(file_name, data) => {
+                let mpq = match parser::parse(&data) {
+                    Ok((_, mpq)) => mpq,
+                    Err(err) => {
+                        let err = JsError::from(err);
+                        log!("Unable to parse SC2Replay", err);
+                        return false;
+                    }
+                };
+                let details = read_details(&mpq, &data);
+                self.files.push(ProcessedReplay {
                     data,
-                    file_type,
+                    mpq,
+                    details,
                     name: file_name.clone(),
                 });
                 self.readers.remove(&file_name);
@@ -51,7 +61,6 @@ impl Component for App {
             Msg::Files(files) => {
                 for file in files.into_iter() {
                     let file_name = file.name();
-                    let file_type = file.raw_mime_type();
 
                     let task = {
                         let link = ctx.link().clone();
@@ -60,7 +69,6 @@ impl Component for App {
                         gloo::file::callbacks::read_as_bytes(&file, move |res| {
                             link.send_message(Msg::Loaded(
                                 file_name,
-                                file_type,
                                 res.expect("failed to read file"),
                             ))
                         })
@@ -74,65 +82,90 @@ impl Component for App {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-            <div id="wrapper">
-                <p id="title">{ "Upload SC2Replay file" }</p>
-                <label for="file-upload">
-                    <div
-                        id="drop-container"
-                        ondrop={ctx.link().callback(|event: DragEvent| {
-                            event.prevent_default();
-                            let files = event.data_transfer().unwrap().files();
-                            Self::upload_files(files)
-                        })}
-                        ondragover={Callback::from(|event: DragEvent| {
-                            event.prevent_default();
-                        })}
-                        ondragenter={Callback::from(|event: DragEvent| {
-                            event.prevent_default();
-                        })}
-                    >
-                        <i class="fa fa-cloud-upload"></i>
+        <main>
+        <nav class="navbar navbar-expand-lg bg-body-tertiary">
+          <div class="container-fluid">
+            <a class="navbar-brand" href="#">{ "SC2Replay WASM Analyser " }</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+              <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarSupportedContent">
+              <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <li class="nav-item">
+                  <a class="nav-link active" aria-current="page" href="#">{ "Overview" }</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="#">{" Messages "}</a>
+                </li>
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  { "Units" }
+                  </a>
+                  <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#">{ "Born" }</a></li>
+                    <li><a class="dropdown-item" href="#">{ "Init" }</a></li>
+                    <li><a class="dropdown-item" href="#">{ "Dead" }</a></li>
+                  </ul>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link disabled" aria-disabled="true">{ "Stats" }</a>
+                </li>
+              </ul>
+                    <label for="file-upload">
+                        <div
+                            id="drop-container"
+                            class="mb-1"
+                            ondrop={ctx.link().callback(|event: DragEvent| {
+                                event.prevent_default();
+                                let files = event.data_transfer().unwrap().files();
+                                Self::upload_files(files)
+                            })}
+                            ondragover={Callback::from(|event: DragEvent| {
+                                event.prevent_default();
+                            })}
+                            ondragenter={Callback::from(|event: DragEvent| {
+                                event.prevent_default();
+                            })}
+                        >
+                            <i class="fa fa-cloud-upload"></i>
+                        </div>
+                    </label>
+                    <div class="input-group mb-1">
+                        <input
+                            class="form-control"
+                            id="file-upload"
+                            type="file"
+                            accept="data/*.SC2Replay"
+                            multiple={true}
+                            onchange={ctx.link().callback(move |e: Event| {
+                                let input: HtmlInputElement = e.target_unchecked_into();
+                                Self::upload_files(input.files())
+                            })}
+                        />
                     </div>
-                </label>
-                <input
-                    type="butonn"
-                    id="file-upload"
-                    type="file"
-                    accept="data/*.SC2Replay"
-                    multiple={true}
-                    onchange={ctx.link().callback(move |e: Event| {
-                        let input: HtmlInputElement = e.target_unchecked_into();
-                        Self::upload_files(input.files())
-                    })}
-                />
-                <div id="preview-area">
-                    { for self.files.iter().map(Self::view_file) }
-                </div>
             </div>
-        }
+          </div>
+        </nav>
+        <div class="container">
+            { for self.files.iter().map(Self::view_file) }
+        </div>
+        </main>
+         }
     }
 }
 
 impl App {
-    fn view_file(file: &FileDetails) -> Html {
-        let (_input, mpq) = parser::parse(&file.data).unwrap();
-        let replay_details = read_details(&mpq, &file.data);
+    fn view_file(file: &ProcessedReplay) -> Html {
+        // Initially everything is aimed at just one file.
+        let replay_details = read_details(&file.mpq, &file.data);
         let details_json = serde_json::to_string(&replay_details).unwrap();
         html! {
             <div class="preview-tile">
                 <p class="preview-name">{ format!("{}", file.name) }</p>
                 <div class="preview-media">
-                    if file.file_type.contains("image") {
-                        <img src={format!("data:{};base64,{}", file.file_type, STANDARD.encode(&file.data))} />
-                    } else if file.file_type.contains("video") {
-                        <video controls={true}>
-                            <source src={format!("data:{};base64,{}", file.file_type, STANDARD.encode(&file.data))} type={file.file_type.clone()}/>
-                        </video>
-                    } else {
-                        <pre>
+                    <pre>
                         { details_json }
-                        </pre>
-                    }
+                    </pre>
                 </div>
             </div>
         }
