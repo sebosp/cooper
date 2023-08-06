@@ -7,7 +7,7 @@
 cargo install --locked trunk
 ```
 ## Running
-```
+```sh
 trunk serve --open
 ```
 

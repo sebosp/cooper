@@ -294,7 +294,7 @@ impl App {
                 <div class="col-2 m-0 p-0" ><code title={ format!("delta: {}", game_snapshot.frame) }>{ source_user_name }</code>{ ":" }</div>
                 <div class="col-1 m-0 p-0 text-start" >{ format!("Resources {}/{}", game_snapshot.minerals, game_snapshot.vespene) }</div>
                 <div class="col-1 m-0 p-0 text-start" >{ format!("Supply {}/{}", game_snapshot.supply_used, game_snapshot.supply_available) }</div>
-                <div class="col-2 m-0 p-0 text-start" >{ format!("Army {}", game_snapshot.active_force_minerals + game_snapshot.active_force_vespene) }</div>
+                <div class="col-2 m-0 p-0 text-start" >{ format!("Army {}/{}", game_snapshot.active_force_minerals, game_snapshot.active_force_vespene) }</div>
             </div>
         }
     }
