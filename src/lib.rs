@@ -330,7 +330,6 @@ impl App {
         html! {
               <div class="row">
                 <div class="col-1" style={ color }>  </div>
-                <div class="col-1"> { &player.control } </div>
                 <div class="col-1"></div>
                 <div class="col-2"> { &player.race } </div>
                 <div class="col-4"> <a href={ player_url }> { player_name } </a> </div>
