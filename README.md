@@ -1,15 +1,18 @@
-# nannou-sc2 0.0.1
+# cooper 0.0.1
 
-Nannou starcraft 2 visualizations
 
+## Running
+```
+trunk serve --open
+```
 
 ## Building
 ```
-trunk build --public-url nannou-sc2/
+trunk build --public-url cooper/
 ```
 
 ## Current version
 
 Drag and drop the SC2Replay or click on Upload.
 
-[github.io](https://sebosp.github.io/nannou-sc2/)
+[github.io](https://sebosp.github.io/cooper/)
