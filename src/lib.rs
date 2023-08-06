@@ -4,17 +4,31 @@ use gloo_console::log;
 use nom_mpq::parser;
 use s2protocol::details::PlayerDetails;
 use s2protocol::message_events::MessageEvent;
-use s2protocol::versions::{read_details, read_message_events};
+use s2protocol::versions::{read_details, read_message_events, read_tracker_events};
 use std::collections::HashMap;
+use s2protocol::tracker_events::ReplayTrackerEvent::PlayerStats;
+use s2protocol::tracker_events::TrackerEvent;
 use wasm_bindgen::JsError;
 use web_sys::{DragEvent, Event, FileList, HtmlInputElement};
 use yew::html::TargetCast;
 use yew::{html, Callback, Component, Context, Html};
 
+struct GameSnapshot {
+    pub frame: u32,
+    pub user_id: u8,
+    pub minerals: i32,
+    pub vespene: i32,
+    pub supply_available: i32,
+    pub supply_used: i32,
+    pub active_force_minerals: i32,
+    pub active_force_vespene: i32,
+}
+
 struct ProcessedReplay {
     name: String,
     details: s2protocol::details::Details,
     messages: Vec<MessageEvent>,
+    game_snapshots: Vec<GameSnapshot>,
 }
 
 pub enum Msg {
@@ -51,10 +65,12 @@ impl Component for App {
                 };
                 let details = read_details(&mpq, &data);
                 let messages = read_message_events(&mpq, &data);
+                let tracker_events = read_tracker_events(&mpq, &data);
                 self.files.push(ProcessedReplay {
                     details,
                     name: file_name.clone(),
                     messages,
+                    game_snapshots: extract_game_snapshots(tracker_events),
                 });
                 self.readers.remove(&file_name);
                 true
@@ -155,6 +171,30 @@ impl Component for App {
     }
 }
 
+fn extract_game_snapshots(tracker_events: Vec<TrackerEvent>) -> Vec<GameSnapshot> {
+    let mut frame = 0;
+    let mut snapshots = vec!();
+    for event in tracker_events {
+        frame += event.delta;
+        match event.event {
+            PlayerStats(event) => {
+                snapshots.push(GameSnapshot {
+                    frame,
+                    user_id: event.player_id,
+                    minerals: event.stats.minerals_current,
+                    vespene: event.stats.vespene_current,
+                    supply_available: event.stats.food_made.min(200),
+                    supply_used: event.stats.food_used,
+                    active_force_minerals: event.stats.minerals_used_active_forces,
+                    active_force_vespene: event.stats.vespene_used_active_forces,
+                });
+            }
+            _ => {}
+        }
+    }
+    snapshots
+}
+
 impl App {
     /// Displays the SC2Replay general details, this is part of the Details tab.
     fn view_details(replay: &ProcessedReplay) -> Html {
@@ -201,6 +241,14 @@ impl App {
                  { for replay.messages.iter().map(|msg| Self::view_message_events(msg, &replay.details.player_list)) }
                 </div>
               </div>
+              <div class="row">
+              <div class="col"><h2>{ "Game tracker" }</h2></div>
+              </div>
+              <div class="row">
+                <div class="col">
+                 { for replay.game_snapshots.iter().map(|msg| Self::view_game_snapshots(msg, &replay.details.player_list)) }
+                </div>
+              </div>
             </div>
         }
     }
@@ -226,8 +274,27 @@ impl App {
         html! {
             <div class="row m-0 p-0">
                 <div class="col-2 m-0 p-0" ><code title={ format!("delta: {}", msg.delta) }>{ source_user_name }</code>{ ":" }</div>
+                <div class="col-1 m-0 p-0" >{ msg.user_id }  </div>
                 <div class="col-1 m-0 p-0" >{ recipient }  </div>
                 <div class="col-9 m-0 p-0 text-start" >{ &message.m_string }</div>
+            </div>
+        }
+    }
+
+    /// To be called over the player list detail items.
+    fn view_game_snapshots(game_snapshot: &GameSnapshot, players: &[PlayerDetails]) -> Html {
+        let mut source_user_name = "Unknown".to_string();
+        for player in players {
+            if player.team_id == game_snapshot.user_id.saturating_sub(1) {
+                source_user_name = Self::minor_player_clan_unescape(&player.name);
+            }
+        }
+        html! {
+            <div class="row m-0 p-0">
+                <div class="col-2 m-0 p-0" ><code title={ format!("delta: {}", game_snapshot.frame) }>{ source_user_name }</code>{ ":" }</div>
+                <div class="col-1 m-0 p-0 text-start" >{ format!("Resources {}/{}", game_snapshot.minerals, game_snapshot.vespene) }</div>
+                <div class="col-1 m-0 p-0 text-start" >{ format!("Supply {}/{}", game_snapshot.supply_used, game_snapshot.supply_available) }</div>
+                <div class="col-2 m-0 p-0 text-start" >{ format!("Army {}", game_snapshot.active_force_minerals + game_snapshot.active_force_vespene) }</div>
             </div>
         }
     }
@@ -263,6 +330,7 @@ impl App {
         html! {
               <div class="row">
                 <div class="col-1" style={ color }>  </div>
+                <div class="col-1"> { &player.control } </div>
                 <div class="col-1"></div>
                 <div class="col-2"> { &player.race } </div>
                 <div class="col-4"> <a href={ player_url }> { player_name } </a> </div>

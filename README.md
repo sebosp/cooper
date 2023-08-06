@@ -1,10 +1,16 @@
 # nannou-sc2 0.0.1
 
-Nannou starcraft 2 visualizations
+Nannou StarCraft 2 visualizations
 
+
+## Install trunk
+
+```sh
+cargo install --locked trunk
+```
 
 ## Building
-```
+```sh
 trunk build --public-url nannou-sc2/
 ```
 
