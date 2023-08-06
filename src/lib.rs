@@ -177,16 +177,16 @@ fn extract_game_snapshots(tracker_events: Vec<TrackerEvent>) -> Vec<GameSnapshot
     for event in tracker_events {
         frame += event.delta;
         match event.event {
-            PlayerStats(event) => {
+            PlayerStats(playerStatsEvent) => {
                 snapshots.push(GameSnapshot {
                     frame,
-                    user_id: event.player_id,
-                    minerals: event.stats.minerals_current,
-                    vespene: event.stats.vespene_current,
-                    supply_available: event.stats.food_made.min(200),
-                    supply_used: event.stats.food_used,
-                    active_force_minerals: event.stats.minerals_used_active_forces,
-                    active_force_vespene: event.stats.vespene_used_active_forces,
+                    user_id: playerStatsEvent.player_id,
+                    minerals: playerStatsEvent.stats.minerals_current,
+                    vespene: playerStatsEvent.stats.vespene_current,
+                    supply_available: playerStatsEvent.stats.food_made.min(200),
+                    supply_used: playerStatsEvent.stats.food_used,
+                    active_force_minerals: playerStatsEvent.stats.minerals_used_active_forces,
+                    active_force_vespene: playerStatsEvent.stats.vespene_used_active_forces,
                 });
             }
             _ => {}
