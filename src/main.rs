@@ -1,4 +1,4 @@
-use nannou_sc2::*;
+use cooper::*;
 
 fn main() {
     yew::Renderer::<App>::new().render();

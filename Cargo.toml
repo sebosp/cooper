@@ -1,8 +1,8 @@
 [package]
-name = "nannou-sc2"
+name = "cooper"
 version = "0.1.0"
 edition = "2021"
-repository = "https://github.com/sebosp/nannou-sc2"
+repository = "https://github.com/sebosp/cooper"
 
 [dependencies]
 yew = { version = "0.20", features = ["csr"] }

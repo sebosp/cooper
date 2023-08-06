@@ -1,6 +1,4 @@
-# nannou-sc2 0.0.1
-
-Nannou StarCraft 2 visualizations
+# cooper 0.0.1
 
 
 ## Install trunk
@@ -8,14 +6,18 @@ Nannou StarCraft 2 visualizations
 ```sh
 cargo install --locked trunk
 ```
+## Running
+```
+trunk serve --open
+```
 
 ## Building
 ```sh
-trunk build --public-url nannou-sc2/
+trunk build --public-url cooper/
 ```
 
 ## Current version
 
 Drag and drop the SC2Replay or click on Upload.
 
-[github.io](https://sebosp.github.io/nannou-sc2/)
+[github.io](https://sebosp.github.io/cooper/)
