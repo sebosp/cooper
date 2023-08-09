@@ -4,17 +4,36 @@ use gloo_console::log;
 use nom_mpq::parser;
 use s2protocol::details::PlayerDetails;
 use s2protocol::message_events::MessageEvent;
-use s2protocol::versions::{read_details, read_message_events};
+use s2protocol::tracker_events::ReplayTrackerEvent::PlayerStats;
+use s2protocol::tracker_events::TrackerEvent;
+use s2protocol::versions::{read_details, read_message_events, read_tracker_events};
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 use wasm_bindgen::JsError;
+use web_sys::{window, HtmlCanvasElement, WebGlRenderingContext as GL, WebGlRenderingContext};
 use web_sys::{DragEvent, Event, FileList, HtmlInputElement};
 use yew::html::TargetCast;
-use yew::{html, Callback, Component, Context, Html};
+use yew::{html, Callback, Component, Context, Html, NodeRef};
+
+struct GameSnapshot {
+    pub frame: u32,
+    pub user_id: u8,
+    pub minerals: i32,
+    pub vespene: i32,
+    pub supply_available: i32,
+    pub supply_used: i32,
+    pub active_force_minerals: i32,
+    pub active_force_vespene: i32,
+}
 
 struct ProcessedReplay {
     name: String,
     details: s2protocol::details::Details,
     messages: Vec<MessageEvent>,
+    game_snapshots: Vec<GameSnapshot>,
 }
 
 pub enum Msg {
@@ -25,6 +44,7 @@ pub enum Msg {
 pub struct App {
     readers: HashMap<String, FileReader>,
     files: Vec<ProcessedReplay>,
+    node_ref: NodeRef,
 }
 
 impl Component for App {
@@ -35,6 +55,7 @@ impl Component for App {
         Self {
             readers: HashMap::default(),
             files: Vec::default(),
+            node_ref: NodeRef::default(),
         }
     }
 
@@ -51,10 +72,12 @@ impl Component for App {
                 };
                 let details = read_details(&mpq, &data);
                 let messages = read_message_events(&mpq, &data);
+                let tracker_events = read_tracker_events(&mpq, &data);
                 self.files.push(ProcessedReplay {
                     details,
                     name: file_name.clone(),
                     messages,
+                    game_snapshots: extract_game_snapshots(tracker_events),
                 });
                 self.readers.remove(&file_name);
                 true
@@ -148,14 +171,162 @@ impl Component for App {
           </div>
         </nav>
         <div class="container">
+            <canvas ref={self.node_ref.clone()} />
+        </div>
+        <div class="container">
             { for self.files.iter().map(Self::view_details) }
         </div>
         </main>
          }
     }
+
+    fn rendered(&mut self, _ctx: &Context<Self>, first_render: bool) {
+        // Only start the render loop if it's the first render
+        // There's no loop cancellation taking place, so if multiple renders happen,
+        // there would be multiple loops running. That doesn't *really* matter here because
+        // there's no props update and no SSR is taking place, but it is something to keep in
+        // consideration
+        if !first_render {
+            return;
+        }
+        // Once rendered, store references for the canvas and GL context. These can be used for
+        // resizing the rendering area when the window or canvas element are resized, as well as
+        // for making GL calls.
+        let canvas = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
+        let gl: GL = canvas
+            .get_context("webgl")
+            .unwrap()
+            .unwrap()
+            .dyn_into()
+            .unwrap();
+        Self::render_gl(gl);
+    }
+}
+
+fn extract_game_snapshots(tracker_events: Vec<TrackerEvent>) -> Vec<GameSnapshot> {
+    let mut frame = 0;
+    let mut snapshots = vec![];
+    for event in tracker_events {
+        frame += event.delta;
+        match event.event {
+            PlayerStats(player_stats_event) => {
+                snapshots.push(GameSnapshot {
+                    frame,
+                    user_id: player_stats_event.player_id,
+                    minerals: player_stats_event.stats.minerals_current,
+                    vespene: player_stats_event.stats.vespene_current,
+                    supply_available: player_stats_event.stats.food_made.min(200),
+                    supply_used: player_stats_event.stats.food_used,
+                    active_force_minerals: player_stats_event.stats.minerals_used_active_forces,
+                    active_force_vespene: player_stats_event.stats.vespene_used_active_forces,
+                });
+            }
+            _ => {}
+        }
+    }
+    snapshots
 }
 
 impl App {
+    fn request_animation_frame(f: &Closure<dyn FnMut()>) {
+        window()
+            .unwrap()
+            .request_animation_frame(f.as_ref().unchecked_ref())
+            .expect("should register `requestAnimationFrame` OK");
+    }
+
+    fn render_gl(gl: WebGlRenderingContext) {
+        // This should log only once -- not once per frame
+
+        let mut timestamp = 0.0;
+
+        let vert_code = include_str!("./basic.vert");
+        let frag_code = include_str!("./basic.frag");
+
+        // This list of vertices will draw two triangles to cover the entire canvas.
+        let vertices: Vec<f32> = vec![
+            // First triangle:
+            -1.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.5, // Top left Red
+            1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.5, // Top right Green
+            -1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.5, // Bottom left Blue
+            // Second triangle:
+            -1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.5, // Bottom left Red
+            1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.5, // Top right Green
+            1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.5, // Bottom right Blue
+        ];
+        let vertex_buffer = gl.create_buffer().unwrap();
+        let verts = js_sys::Float32Array::from(vertices.as_slice());
+
+        gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vertex_buffer));
+        gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &verts, GL::STATIC_DRAW);
+
+        let vert_shader = gl.create_shader(GL::VERTEX_SHADER).unwrap();
+        gl.shader_source(&vert_shader, vert_code);
+        gl.compile_shader(&vert_shader);
+
+        let frag_shader = gl.create_shader(GL::FRAGMENT_SHADER).unwrap();
+        gl.shader_source(&frag_shader, frag_code);
+        gl.compile_shader(&frag_shader);
+
+        let shader_program = gl.create_program().unwrap();
+        gl.attach_shader(&shader_program, &vert_shader);
+        gl.attach_shader(&shader_program, &frag_shader);
+        gl.link_program(&shader_program);
+
+        gl.use_program(Some(&shader_program));
+
+        let gl_float_byte_size = 4i32;
+
+        // Attach the position vector as an attribute for the GL context.
+        let position = gl.get_attrib_location(&shader_program, "a_position") as u32;
+        gl.vertex_attrib_pointer_with_i32(
+            position,
+            3,
+            GL::FLOAT,
+            false,
+            7 * gl_float_byte_size,
+            0, // The offset, in this case the triangles start at 0
+        );
+        gl.enable_vertex_attrib_array(position);
+
+        // Attach the position vector as an attribute for the GL context.
+        let color = gl.get_attrib_location(&shader_program, "a_color") as u32;
+        gl.vertex_attrib_pointer_with_i32(
+            color,
+            4,
+            GL::FLOAT,
+            false,
+            7 * gl_float_byte_size,
+            3 * gl_float_byte_size,
+        );
+        gl.enable_vertex_attrib_array(color);
+
+        // Attach the time as a uniform for the GL context.
+        let time = gl.get_uniform_location(&shader_program, "u_time");
+        gl.uniform1f(time.as_ref(), timestamp as f32);
+
+        gl.draw_arrays(GL::TRIANGLES, 0, 6);
+
+        // Gloo-render's request_animation_frame has this extra closure
+        // wrapping logic running every frame, unnecessary cost.
+        // Here constructing the wrapped closure just once.
+
+        let cb = Rc::new(RefCell::new(None));
+
+        *cb.borrow_mut() = Some(Closure::wrap(Box::new({
+            let cb = cb.clone();
+            move || {
+                // This should repeat every frame
+                timestamp += 20.0;
+                gl.uniform1f(time.as_ref(), timestamp as f32);
+                gl.draw_arrays(GL::TRIANGLES, 0, 6);
+                App::request_animation_frame(cb.borrow().as_ref().unwrap());
+            }
+        }) as Box<dyn FnMut()>));
+
+        App::request_animation_frame(cb.borrow().as_ref().unwrap());
+    }
+
     /// Displays the SC2Replay general details, this is part of the Details tab.
     fn view_details(replay: &ProcessedReplay) -> Html {
         // Initially everything is aimed at just one replay.
@@ -201,6 +372,14 @@ impl App {
                  { for replay.messages.iter().map(|msg| Self::view_message_events(msg, &replay.details.player_list)) }
                 </div>
               </div>
+              <div class="row">
+              <div class="col"><h2>{ "Game tracker" }</h2></div>
+              </div>
+              <div class="row">
+                <div class="col">
+                 { for replay.game_snapshots.iter().map(|msg| Self::view_game_snapshots(msg, &replay.details.player_list)) }
+                </div>
+              </div>
             </div>
         }
     }
@@ -226,8 +405,27 @@ impl App {
         html! {
             <div class="row m-0 p-0">
                 <div class="col-2 m-0 p-0" ><code title={ format!("delta: {}", msg.delta) }>{ source_user_name }</code>{ ":" }</div>
+                <div class="col-1 m-0 p-0" >{ msg.user_id }  </div>
                 <div class="col-1 m-0 p-0" >{ recipient }  </div>
                 <div class="col-9 m-0 p-0 text-start" >{ &message.m_string }</div>
+            </div>
+        }
+    }
+
+    /// To be called over the player list detail items.
+    fn view_game_snapshots(game_snapshot: &GameSnapshot, players: &[PlayerDetails]) -> Html {
+        let mut source_user_name = "Unknown".to_string();
+        for player in players {
+            if player.team_id == game_snapshot.user_id.saturating_sub(1) {
+                source_user_name = Self::minor_player_clan_unescape(&player.name);
+            }
+        }
+        html! {
+            <div class="row m-0 p-0">
+                <div class="col-2 m-0 p-0" ><code title={ format!("delta: {}", game_snapshot.frame) }>{ source_user_name }</code>{ ":" }</div>
+                <div class="col-1 m-0 p-0 text-start" >{ format!("Resources {}/{}", game_snapshot.minerals, game_snapshot.vespene) }</div>
+                <div class="col-1 m-0 p-0 text-start" >{ format!("Supply {}/{}", game_snapshot.supply_used, game_snapshot.supply_available) }</div>
+                <div class="col-2 m-0 p-0 text-start" >{ format!("Army {}/{}", game_snapshot.active_force_minerals, game_snapshot.active_force_vespene) }</div>
             </div>
         }
     }
