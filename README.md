@@ -1,13 +1,18 @@
 # cooper 0.0.1
 
 
-## Running
+## Install trunk
+
+```sh
+cargo install --locked trunk
 ```
+## Running
+```sh
 trunk serve --open
 ```
 
 ## Building
-```
+```sh
 trunk build --public-url cooper/
 ```
 
