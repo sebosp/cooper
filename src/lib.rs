@@ -7,6 +7,7 @@ use s2protocol::message_events::MessageEvent;
 use s2protocol::tracker_events::ReplayTrackerEvent::PlayerStats;
 use s2protocol::tracker_events::TrackerEvent;
 use s2protocol::versions::{read_details, read_message_events, read_tracker_events};
+use s2protocol::{S2ProtocolError, SC2EventType, SC2ReplayFilters, SC2ReplayState};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -18,6 +19,13 @@ use web_sys::{DragEvent, Event, FileList, HtmlInputElement};
 use yew::html::TargetCast;
 use yew::{html, Callback, Component, Context, Html, NodeRef};
 
+#[derive(thiserror::Error, Debug)]
+pub enum CooperError {
+    #[error("S2Protocol Error")]
+    S2Protocol(#[from] S2ProtocolError),
+}
+
+#[derive(Debug)]
 struct GameSnapshot {
     pub frame: u32,
     pub user_id: u8,
@@ -29,18 +37,22 @@ struct GameSnapshot {
     pub active_force_vespene: i32,
 }
 
+#[derive(Debug)]
 struct ProcessedReplay {
     name: String,
     details: s2protocol::details::Details,
     messages: Vec<MessageEvent>,
+    sc2_state: SC2ReplayState,
     game_snapshots: Vec<GameSnapshot>,
 }
 
+#[derive(Debug)]
 pub enum Msg {
     Loaded(String, Vec<u8>),
     Files(Vec<File>),
 }
 
+#[derive(Debug)]
 pub struct App {
     readers: HashMap<String, FileReader>,
     files: Vec<ProcessedReplay>,
@@ -73,11 +85,21 @@ impl Component for App {
                 let details = read_details(&mpq, &data);
                 let messages = read_message_events(&mpq, &data);
                 let tracker_events = read_tracker_events(&mpq, &data);
+                let sc2_state = match SC2ReplayState::from_mpq(mpq, data, Default::default(), true)
+                {
+                    Ok(val) => val,
+                    Err(err) => {
+                        let err = JsError::from(err);
+                        log!("Unable to create the SC2ReplayState", err);
+                        return false;
+                    }
+                };
                 self.files.push(ProcessedReplay {
                     details,
                     name: file_name.clone(),
                     messages,
                     game_snapshots: extract_game_snapshots(tracker_events),
+                    sc2_state,
                 });
                 self.readers.remove(&file_name);
                 true
@@ -108,7 +130,7 @@ impl Component for App {
         html! {
         <main>
         <nav class="navbar navbar-expand-lg bg-body-tertiary">
-          <div class="container-fluid">
+          <div class="container">
             <a class="navbar-brand" href="#">{ "Online SC2Replay Analyser " }</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
               <span class="navbar-toggler-icon"></span>
@@ -170,7 +192,7 @@ impl Component for App {
             </div>
           </div>
         </nav>
-        <div class="container">
+        <div class="fluid-container">
             <canvas ref={self.node_ref.clone()} />
         </div>
         <div class="container">
