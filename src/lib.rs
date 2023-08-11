@@ -1,6 +1,10 @@
 use gloo::file::callbacks::FileReader;
 use gloo::file::File;
 use gloo_console::log;
+use lyon::math::{point, Box2D, Point};
+use lyon::path::{builder::BorderRadii, Winding};
+use lyon::tessellation::geometry_builder::simple_builder;
+use lyon::tessellation::{FillOptions, FillTessellator, VertexBuffers};
 use nom_mpq::parser;
 use s2protocol::details::PlayerDetails;
 use s2protocol::message_events::MessageEvent;
@@ -193,10 +197,14 @@ impl Component for App {
           </div>
         </nav>
         <div class="fluid-container">
-            <canvas ref={self.node_ref.clone()} />
-        </div>
-        <div class="container">
-            { for self.files.iter().map(Self::view_details) }
+          <div class="row">
+            <div col="10" align="center">
+              <canvas width="600" height="450" ref={self.node_ref.clone()} />
+            </div>
+            <div col="2">
+              { for self.files.iter().map(Self::view_details) }
+            </div>
+          </div>
         </div>
         </main>
          }
@@ -265,17 +273,40 @@ impl App {
         let vert_code = include_str!("./basic.vert");
         let frag_code = include_str!("./basic.frag");
 
-        // This list of vertices will draw two triangles to cover the entire canvas.
-        let vertices: Vec<f32> = vec![
-            // First triangle:
-            -1.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.5, // Top left Red
-            1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.5, // Top right Green
-            -1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.5, // Bottom left Blue
-            // Second triangle:
-            -1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.5, // Bottom left Red
-            1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.5, // Top right Green
-            1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.5, // Bottom right Blue
-        ];
+        let mut geometry: VertexBuffers<Point, u16> = VertexBuffers::new();
+        let mut geometry_builder = simple_builder(&mut geometry);
+        let options = FillOptions::tolerance(0.1);
+        let mut tessellator = FillTessellator::new();
+
+        let mut builder = tessellator.builder(&options, &mut geometry_builder);
+
+        builder.add_rounded_rectangle(
+            &Box2D {
+                min: point(-1.0, -1.0),
+                max: point(1.0, 1.0),
+            },
+            &BorderRadii {
+                top_left: 0.02,
+                top_right: 0.02,
+                bottom_left: 0.02,
+                bottom_right: 0.02,
+            },
+            Winding::Positive,
+        );
+
+        let _ = builder.build();
+
+        // No idea how gl Draw Elements work so let's build the payload by hand:
+        let mut vertices: Vec<f32> = Vec::with_capacity(geometry.indices.len() * 7usize);
+        for idx in geometry.indices {
+            vertices.push(geometry.vertices[idx as usize].x);
+            vertices.push(geometry.vertices[idx as usize].y);
+            vertices.push(0.0); // z
+            vertices.push(0.0); // r
+            vertices.push(0.0); // g
+            vertices.push(0.0); // b
+            vertices.push(1.0); // a
+        }
         let vertex_buffer = gl.create_buffer().unwrap();
         let verts = js_sys::Float32Array::from(vertices.as_slice());
 
@@ -327,7 +358,7 @@ impl App {
         let time = gl.get_uniform_location(&shader_program, "u_time");
         gl.uniform1f(time.as_ref(), timestamp as f32);
 
-        gl.draw_arrays(GL::TRIANGLES, 0, 6);
+        gl.draw_arrays(GL::TRIANGLES, 0, vertices.len() as i32 / 7i32);
 
         // Gloo-render's request_animation_frame has this extra closure
         // wrapping logic running every frame, unnecessary cost.
@@ -341,7 +372,7 @@ impl App {
                 // This should repeat every frame
                 timestamp += 20.0;
                 gl.uniform1f(time.as_ref(), timestamp as f32);
-                gl.draw_arrays(GL::TRIANGLES, 0, 6);
+                gl.draw_arrays(GL::TRIANGLES, 0, vertices.len() as i32 / 7i32);
                 App::request_animation_frame(cb.borrow().as_ref().unwrap());
             }
         }) as Box<dyn FnMut()>));
