@@ -1,10 +1,6 @@
 use gloo::file::callbacks::FileReader;
 use gloo::file::File;
 use gloo_console::log;
-use lyon::math::{point, Box2D, Point};
-use lyon::path::{builder::BorderRadii, Winding};
-use lyon::tessellation::geometry_builder::simple_builder;
-use lyon::tessellation::{FillOptions, FillTessellator, VertexBuffers};
 use nom_mpq::parser;
 use s2protocol::details::PlayerDetails;
 use s2protocol::message_events::MessageEvent;
@@ -22,6 +18,12 @@ use web_sys::{window, HtmlCanvasElement, WebGlRenderingContext as GL, WebGlRende
 use web_sys::{DragEvent, Event, FileList, HtmlInputElement};
 use yew::html::TargetCast;
 use yew::{html, Callback, Component, Context, Html, NodeRef};
+
+pub mod colors;
+pub mod map;
+pub mod tracker_events;
+
+pub use colors::*;
 
 #[derive(thiserror::Error, Debug)]
 pub enum CooperError {
@@ -211,6 +213,7 @@ impl Component for App {
     }
 
     fn rendered(&mut self, _ctx: &Context<Self>, first_render: bool) {
+        log!("- rendered");
         // Only start the render loop if it's the first render
         // There's no loop cancellation taking place, so if multiple renders happen,
         // there would be multiple loops running. That doesn't *really* matter here because
@@ -229,7 +232,8 @@ impl Component for App {
             .unwrap()
             .dyn_into()
             .unwrap();
-        Self::render_gl(gl);
+
+        Self::render_gl(gl, self.files);
     }
 }
 
@@ -265,7 +269,7 @@ impl App {
             .expect("should register `requestAnimationFrame` OK");
     }
 
-    fn render_gl(gl: WebGlRenderingContext) {
+    fn render_gl(gl: WebGlRenderingContext, sc2_state: SC2ReplayState) {
         // This should log only once -- not once per frame
 
         let mut timestamp = 0.0;
@@ -273,40 +277,7 @@ impl App {
         let vert_code = include_str!("./basic.vert");
         let frag_code = include_str!("./basic.frag");
 
-        let mut geometry: VertexBuffers<Point, u16> = VertexBuffers::new();
-        let mut geometry_builder = simple_builder(&mut geometry);
-        let options = FillOptions::tolerance(0.1);
-        let mut tessellator = FillTessellator::new();
-
-        let mut builder = tessellator.builder(&options, &mut geometry_builder);
-
-        builder.add_rounded_rectangle(
-            &Box2D {
-                min: point(-1.0, -1.0),
-                max: point(1.0, 1.0),
-            },
-            &BorderRadii {
-                top_left: 0.02,
-                top_right: 0.02,
-                bottom_left: 0.02,
-                bottom_right: 0.02,
-            },
-            Winding::Positive,
-        );
-
-        let _ = builder.build();
-
-        // No idea how gl Draw Elements work so let's build the payload by hand:
-        let mut vertices: Vec<f32> = Vec::with_capacity(geometry.indices.len() * 7usize);
-        for idx in geometry.indices {
-            vertices.push(geometry.vertices[idx as usize].x);
-            vertices.push(geometry.vertices[idx as usize].y);
-            vertices.push(0.0); // z
-            vertices.push(0.0); // r
-            vertices.push(0.0); // g
-            vertices.push(0.0); // b
-            vertices.push(1.0); // a
-        }
+        let vertices = map::build_map_background();
         let vertex_buffer = gl.create_buffer().unwrap();
         let verts = js_sys::Float32Array::from(vertices.as_slice());
 
@@ -364,20 +335,54 @@ impl App {
         // wrapping logic running every frame, unnecessary cost.
         // Here constructing the wrapped closure just once.
 
-        let cb = Rc::new(RefCell::new(None));
+        if let Some((event, first_loop_updated_units)) = sc2_state.transduce() {
+            let mut curr_event = event;
+            let mut curr_updated_units = first_loop_updated_units;
+            let mut max_elapsed_replay_loop = 0.0;
+            let cb = Rc::new(RefCell::new(None));
 
-        *cb.borrow_mut() = Some(Closure::wrap(Box::new({
-            let cb = cb.clone();
-            move || {
-                // This should repeat every frame
-                timestamp += 20.0;
-                gl.uniform1f(time.as_ref(), timestamp as f32);
-                gl.draw_arrays(GL::TRIANGLES, 0, vertices.len() as i32 / 7i32);
-                App::request_animation_frame(cb.borrow().as_ref().unwrap());
-            }
-        }) as Box<dyn FnMut()>));
+            *cb.borrow_mut() = Some(Closure::wrap(Box::new({
+                let cb = cb.clone();
+                move || {
+                    // This should repeat every frame
 
-        App::request_animation_frame(cb.borrow().as_ref().unwrap());
+                    while timestamp > max_elapsed_replay_loop {
+                        // if we should load new events...
+                        if let Some((event, updated_units)) = sc2_state.transduce() {
+                            match event {
+                                SC2EventType::Tracker {
+                                    tracker_loop,
+                                    event,
+                                } => {
+                                    log!("-- {} - {}", tracker_loop, format!("{:?}", event));
+                                    vertices.append(&mut tracker_events::process_event(
+                                        &sc2_state,
+                                        &event,
+                                        updated_units,
+                                    ))
+                                }
+                                SC2EventType::Game {
+                                    game_loop,
+                                    user_id,
+                                    event,
+                                } => {
+                                    log!("-- {} - {}", game_loop, format!("{:?}", event));
+                                    //add_game_event(self, user_id, &event, updated_units, recording_stream)?
+                                }
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    timestamp += 20.0;
+                    gl.uniform1f(time.as_ref(), timestamp as f32);
+                    gl.draw_arrays(GL::TRIANGLES, 0, vertices.len() as i32 / 7i32);
+                    App::request_animation_frame(cb.borrow().as_ref().unwrap());
+                }
+            }) as Box<dyn FnMut()>));
+
+            App::request_animation_frame(cb.borrow().as_ref().unwrap());
+        }
     }
 
     /// Displays the SC2Replay general details, this is part of the Details tab.
