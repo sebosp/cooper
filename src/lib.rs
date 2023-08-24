@@ -60,9 +60,9 @@ impl Component for Plot {
             PlotMsg::Redraw => {
                 let element: HtmlCanvasElement = self.canvas.cast().unwrap();
 
-                let rect = element.get_bounding_client_rect();
-                element.set_height(rect.height() as u32);
-                element.set_width(rect.width() as u32);
+                // let rect = element.get_bounding_client_rect();
+                element.set_height(600);
+                element.set_width(600);
 
                 let backend = CanvasBackend::with_canvas_object(element).unwrap();
 
@@ -95,7 +95,6 @@ impl Component for Plot {
 
                 chart
                     .configure_mesh()
-                    .bold_line_style(&WHITE.mix(0.3))
                     .axis_desc_style(("sans-serif", 15))
                     .draw();
 
@@ -107,8 +106,6 @@ impl Component for Plot {
                         &plot.color.mix(0.5),
                     ));
                 }
-                // .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
-
                 false
             }
             _ => true,
@@ -407,6 +404,56 @@ impl App {
                 color: BLUE,
             },
         ];
+        let resource_series = vec![
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 1)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.minerals,
+                    })
+                    .collect(),
+                color: RED,
+            },
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 1)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.vespene,
+                    })
+                    .collect(),
+                color: RED_400,
+            },
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 2)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.minerals,
+                    })
+                    .collect(),
+                color: BLUE,
+            },
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 2)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.vespene,
+                    })
+                    .collect(),
+                color: BLUE_400,
+            },
+        ];
 
         // Still haven't made sense of the time_utc.
         html! {
@@ -431,6 +478,12 @@ impl App {
                 <div class="col">
                  { for replay.messages.iter().map(|msg| Self::view_message_events(msg, &replay.details.player_list)) }
                 </div>
+              </div>
+              <div class="row">
+              <div class="col"><h2>{ "Resources" }</h2></div>
+              </div>
+              <div class="row">
+                <Plot series={resource_series} />
               </div>
               <div class="row">
               <div class="col"><h2>{ "Supply" }</h2></div>
