@@ -14,6 +14,7 @@ use yew::html::TargetCast;
 use yew::{html, Callback, Component, Context, Html};
 
 use plotters::prelude::*;
+use plotters::style::full_palette::{BLUE_400, RED_400};
 use plotters_canvas::CanvasBackend;
 use web_sys::HtmlCanvasElement;
 use yew::prelude::*;
@@ -23,9 +24,21 @@ pub enum PlotMsg {
     Nothing,
 }
 
+#[derive(PartialEq)]
+pub struct PlotData {
+    x: u32,
+    y: i32,
+}
+
+#[derive(PartialEq)]
+pub struct PlotSeries {
+    series: Vec<PlotData>,
+    color: RGBColor,
+}
+
 #[derive(Properties, PartialEq)]
 pub struct PlotProperties {
-    game_snapshots: Vec<GameSnapshot>,
+    series: Vec<PlotSeries>,
 }
 pub struct Plot {
     canvas: NodeRef,
@@ -56,26 +69,28 @@ impl Component for Plot {
                 let drawing_area = backend.into_drawing_area();
                 drawing_area.fill(&RGBColor(200, 200, 200)).unwrap();
 
-                let max_frame = ctx
+                let max_x = ctx
                     .props()
-                    .game_snapshots
+                    .series
                     .iter()
-                    .map(|s| s.frame)
+                    .map(|s| s.series.iter().map(|plot_data| plot_data.x).max())
                     .max()
-                    .unwrap_or_default();
-                let max_value = ctx
+                    .flatten()
+                    .unwrap();
+                let max_y = ctx
                     .props()
-                    .game_snapshots
+                    .series
                     .iter()
-                    .map(|s| s.supply_used)
+                    .map(|s| s.series.iter().map(|plot_data| plot_data.y).max())
                     .max()
-                    .unwrap_or_default();
+                    .flatten()
+                    .unwrap();
 
                 let mut chart = ChartBuilder::on(&drawing_area)
                     .margin(5)
                     .x_label_area_size(30)
                     .y_label_area_size(30)
-                    .build_cartesian_2d(0..max_frame, 0..max_value)
+                    .build_cartesian_2d(0..max_x, 0..max_y)
                     .unwrap();
 
                 chart
@@ -84,26 +99,14 @@ impl Component for Plot {
                     .axis_desc_style(("sans-serif", 15))
                     .draw();
 
-                chart.draw_series(AreaSeries::new(
-                    ctx.props()
-                        .game_snapshots
-                        .iter()
-                        .filter(|s| s.user_id == 1)
-                        .map(|snapshot| (snapshot.frame, snapshot.supply_used)),
-                    0,
-                    &RED.mix(0.5),
-                ));
-                // .label("y = x^2")
-                // .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
-                chart.draw_series(AreaSeries::new(
-                    ctx.props()
-                        .game_snapshots
-                        .iter()
-                        .filter(|s| s.user_id == 2)
-                        .map(|snapshot| (snapshot.frame, snapshot.supply_used)),
-                    0,
-                    &BLUE.mix(0.5),
-                ));
+                for plot in ctx.props().series.iter() {
+                    chart.draw_series(LineSeries::new(
+                        plot.series
+                            .iter()
+                            .map(|plot_data| (plot_data.x, plot_data.y)),
+                        &plot.color.mix(0.5),
+                    ));
+                }
                 // .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
 
                 false
@@ -328,6 +331,82 @@ impl App {
         } else {
             "bi-shield-minus text-danger"
         };
+        let supply_series = vec![
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 1)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.supply_available,
+                    })
+                    .collect(),
+                color: RED_400,
+            },
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 1)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.supply_used,
+                    })
+                    .collect(),
+                color: RED,
+            },
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 2)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.supply_available,
+                    })
+                    .collect(),
+                color: BLUE_400,
+            },
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 2)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.supply_used,
+                    })
+                    .collect(),
+                color: BLUE,
+            },
+        ];
+        let army_value_series = vec![
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 1)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.active_force_minerals + s.active_force_vespene,
+                    })
+                    .collect(),
+                color: RED,
+            },
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 2)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.active_force_minerals + s.active_force_vespene,
+                    })
+                    .collect(),
+                color: BLUE,
+            },
+        ];
 
         // Still haven't made sense of the time_utc.
         html! {
@@ -357,7 +436,13 @@ impl App {
               <div class="col"><h2>{ "Supply" }</h2></div>
               </div>
               <div class="row">
-                <Plot game_snapshots={replay.game_snapshots.clone().into_iter().collect::<Vec<_>>()} />
+                <Plot series={supply_series} />
+              </div>
+              <div class="row">
+              <div class="col"><h2>{ "Army Value" }</h2></div>
+              </div>
+              <div class="row">
+                <Plot series={army_value_series} />
               </div>
             </div>
         }
