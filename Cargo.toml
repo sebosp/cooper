@@ -6,8 +6,10 @@ repository = "https://github.com/sebosp/cooper"
 
 [dependencies]
 yew = { version = "0.20", features = ["csr"] }
-s2protocol = "1.1.7"
-nom-mpq = "0.1.3"
+plotters = "0.3"
+plotters-canvas = "0.3"
+s2protocol = "1.1"
+nom-mpq = "0.1"
 gloo = "0.9"
 gloo-console = "0.2.3"
 gloo-net = "0.2"
@@ -29,6 +31,7 @@ features = [
   "RequestMode",
   "Response",
   "Window",
+  "HtmlCanvasElement"
 ]
 
 # [lib]

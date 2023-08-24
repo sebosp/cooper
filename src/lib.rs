@@ -4,15 +4,124 @@ use gloo_console::log;
 use nom_mpq::parser;
 use s2protocol::details::PlayerDetails;
 use s2protocol::message_events::MessageEvent;
-use s2protocol::versions::{read_details, read_message_events, read_tracker_events};
-use std::collections::HashMap;
 use s2protocol::tracker_events::ReplayTrackerEvent::PlayerStats;
 use s2protocol::tracker_events::TrackerEvent;
+use s2protocol::versions::{read_details, read_message_events, read_tracker_events};
+use std::collections::HashMap;
 use wasm_bindgen::JsError;
 use web_sys::{DragEvent, Event, FileList, HtmlInputElement};
 use yew::html::TargetCast;
 use yew::{html, Callback, Component, Context, Html};
 
+use plotters::prelude::*;
+use plotters_canvas::CanvasBackend;
+use web_sys::HtmlCanvasElement;
+use yew::prelude::*;
+
+pub enum PlotMsg {
+    Redraw,
+    Nothing,
+}
+
+#[derive(Properties, PartialEq)]
+pub struct PlotProperties {
+    game_snapshots: Vec<GameSnapshot>,
+}
+pub struct Plot {
+    canvas: NodeRef,
+}
+
+impl Component for Plot {
+    type Message = PlotMsg;
+    type Properties = PlotProperties;
+
+    fn create(ctx: &Context<Self>) -> Self {
+        ctx.link().send_message(PlotMsg::Redraw);
+        Plot {
+            canvas: NodeRef::default(),
+        }
+    }
+
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            PlotMsg::Redraw => {
+                let element: HtmlCanvasElement = self.canvas.cast().unwrap();
+
+                let rect = element.get_bounding_client_rect();
+                element.set_height(rect.height() as u32);
+                element.set_width(rect.width() as u32);
+
+                let backend = CanvasBackend::with_canvas_object(element).unwrap();
+
+                let drawing_area = backend.into_drawing_area();
+                drawing_area.fill(&RGBColor(200, 200, 200)).unwrap();
+
+                let max_frame = ctx
+                    .props()
+                    .game_snapshots
+                    .iter()
+                    .map(|s| s.frame)
+                    .max()
+                    .unwrap_or_default();
+                let max_value = ctx
+                    .props()
+                    .game_snapshots
+                    .iter()
+                    .map(|s| s.supply_used)
+                    .max()
+                    .unwrap_or_default();
+
+                let mut chart = ChartBuilder::on(&drawing_area)
+                    .margin(5)
+                    .x_label_area_size(30)
+                    .y_label_area_size(30)
+                    .build_cartesian_2d(0..max_frame, 0..max_value)
+                    .unwrap();
+
+                chart
+                    .configure_mesh()
+                    .bold_line_style(&WHITE.mix(0.3))
+                    .axis_desc_style(("sans-serif", 15))
+                    .draw();
+
+                chart.draw_series(AreaSeries::new(
+                    ctx.props()
+                        .game_snapshots
+                        .iter()
+                        .filter(|s| s.user_id == 1)
+                        .map(|snapshot| (snapshot.frame, snapshot.supply_used)),
+                    0,
+                    &RED.mix(0.5),
+                ));
+                // .label("y = x^2")
+                // .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+                chart.draw_series(AreaSeries::new(
+                    ctx.props()
+                        .game_snapshots
+                        .iter()
+                        .filter(|s| s.user_id == 2)
+                        .map(|snapshot| (snapshot.frame, snapshot.supply_used)),
+                    0,
+                    &BLUE.mix(0.5),
+                ));
+                // .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+
+                false
+            }
+            _ => true,
+        }
+    }
+
+    fn view(&self, _ctx: &Context<Self>) -> Html {
+        html!(
+            <div>
+                <canvas ref = {self.canvas.clone()}/>
+            </div>
+        )
+    }
+}
+
+#[derive(PartialEq, Copy, Clone)]
 struct GameSnapshot {
     pub frame: u32,
     pub user_id: u8,
@@ -20,6 +129,7 @@ struct GameSnapshot {
     pub vespene: i32,
     pub supply_available: i32,
     pub supply_used: i32,
+    pub supply_workers: i32,
     pub active_force_minerals: i32,
     pub active_force_vespene: i32,
 }
@@ -119,7 +229,7 @@ impl Component for App {
                   { "Units" }
                   </a>
                   <ul class="dropdown-menu">
-                    <li><a class="dropdown-item" href="#">{ "Born" }</a></li>
+                    <li><a class="dropdown-item" href="#">{ "Supply" }</a></li>
                     <li><a class="dropdown-item" href="#">{ "Init" }</a></li>
                     <li><a class="dropdown-item" href="#">{ "Dead" }</a></li>
                   </ul>
@@ -173,7 +283,7 @@ impl Component for App {
 
 fn extract_game_snapshots(tracker_events: Vec<TrackerEvent>) -> Vec<GameSnapshot> {
     let mut frame = 0;
-    let mut snapshots = vec!();
+    let mut snapshots = vec![];
     for event in tracker_events {
         frame += event.delta;
         match event.event {
@@ -185,6 +295,7 @@ fn extract_game_snapshots(tracker_events: Vec<TrackerEvent>) -> Vec<GameSnapshot
                     vespene: player_stats_event.stats.vespene_current,
                     supply_available: player_stats_event.stats.food_made.min(200),
                     supply_used: player_stats_event.stats.food_used,
+                    supply_workers: player_stats_event.stats.workers_active_count,
                     active_force_minerals: player_stats_event.stats.minerals_used_active_forces,
                     active_force_vespene: player_stats_event.stats.vespene_used_active_forces,
                 });
@@ -217,6 +328,7 @@ impl App {
         } else {
             "bi-shield-minus text-danger"
         };
+
         // Still haven't made sense of the time_utc.
         html! {
             <div class="container text-center">
@@ -242,12 +354,10 @@ impl App {
                 </div>
               </div>
               <div class="row">
-              <div class="col"><h2>{ "Game tracker" }</h2></div>
+              <div class="col"><h2>{ "Supply" }</h2></div>
               </div>
               <div class="row">
-                <div class="col">
-                 { for replay.game_snapshots.iter().map(|msg| Self::view_game_snapshots(msg, &replay.details.player_list)) }
-                </div>
+                <Plot game_snapshots={replay.game_snapshots.clone().into_iter().collect::<Vec<_>>()} />
               </div>
             </div>
         }
