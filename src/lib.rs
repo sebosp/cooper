@@ -127,6 +127,8 @@ struct GameSnapshot {
     pub user_id: u8,
     pub minerals: i32,
     pub vespene: i32,
+    pub mineral_income: i32,
+    pub vespene_income: i32,
     pub supply_available: i32,
     pub supply_used: i32,
     pub supply_workers: i32,
@@ -293,6 +295,8 @@ fn extract_game_snapshots(tracker_events: Vec<TrackerEvent>) -> Vec<GameSnapshot
                     user_id: player_stats_event.player_id,
                     minerals: player_stats_event.stats.minerals_current,
                     vespene: player_stats_event.stats.vespene_current,
+                    mineral_income: player_stats_event.stats.minerals_collection_rate,
+                    vespene_income: player_stats_event.stats.vespene_collection_rate,
                     supply_available: player_stats_event.stats.food_made.min(200),
                     supply_used: player_stats_event.stats.food_used,
                     supply_workers: player_stats_event.stats.workers_active_count,
@@ -404,6 +408,82 @@ impl App {
                 color: BLUE,
             },
         ];
+        let worker_series = vec![
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 1)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.supply_workers,
+                    })
+                    .collect(),
+                color: RED,
+            },
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 2)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.supply_workers,
+                    })
+                    .collect(),
+                color: BLUE,
+            },
+        ];
+        let income_series = vec![
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 1)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.mineral_income,
+                    })
+                    .collect(),
+                color: RED,
+            },
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 1)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.vespene_income,
+                    })
+                    .collect(),
+                color: RED_400,
+            },
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 2)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.mineral_income,
+                    })
+                    .collect(),
+                color: BLUE,
+            },
+            PlotSeries {
+                series: replay
+                    .game_snapshots
+                    .iter()
+                    .filter(|snapshot| snapshot.user_id == 2)
+                    .map(|s| PlotData {
+                        x: s.frame,
+                        y: s.vespene_income,
+                    })
+                    .collect(),
+                color: BLUE_400,
+            },
+        ];
         let resource_series = vec![
             PlotSeries {
                 series: replay
@@ -478,6 +558,18 @@ impl App {
                 <div class="col">
                  { for replay.messages.iter().map(|msg| Self::view_message_events(msg, &replay.details.player_list)) }
                 </div>
+              </div>
+              <div class="row">
+              <div class="col"><h2>{ "Income" }</h2></div>
+              </div>
+              <div class="row">
+                <Plot series={income_series} />
+              </div>
+              <div class="row">
+              <div class="col"><h2>{ "Workers" }</h2></div>
+              </div>
+              <div class="row">
+                <Plot series={worker_series} />
               </div>
               <div class="row">
               <div class="col"><h2>{ "Resources" }</h2></div>
