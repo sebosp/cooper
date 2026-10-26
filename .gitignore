@@ -1,2 +1,7 @@
 /target
 /dist
+# Backup files of rustfmt
+**/*.rs.bk
+# Debug information of the MSVC builds
+*.pdb
+.idea
