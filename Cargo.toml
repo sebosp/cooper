@@ -1,41 +1,21 @@
 [package]
 name = "cooper"
-version = "0.1.0"
-edition = "2021"
+version = "0.2.0"
+edition = "2024"
 repository = "https://github.com/sebosp/cooper"
+description = "Online SC2Replay analyser, the replays are read in the browser"
 
 [dependencies]
-yew = { version = "0.20", features = ["csr"] }
+# The replays are read from the bytes of the dropped files, from_bytes is new in s2protocol 4.
+s2protocol = { git = "https://github.com/sebosp/s2protocol-rs", rev = "7724f5b5482e75ba4f0477f79125d8e7238d1d27", default-features = false, features = ["tracing_off"] }
+
+# The web application, the analysis of the replays is tested natively.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+yew = { version = "0.23", features = ["csr"] }
 plotters = "0.3"
 plotters-canvas = "0.3"
-s2protocol = "1.1"
-nom-mpq = "0.1"
-gloo = "0.9"
-gloo-console = "0.2.3"
-gloo-net = "0.2"
+gloo = { version = "0.12", features = ["file", "net"] }
 js-sys = "0.3"
-base64 = "0.21"
-serde_json = "1.0.91"
-wasm-bindgen = "0.2.87"
+wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-
-[dependencies.web-sys]
-version = "0.3"
-features = [
-  "File",
-  "DragEvent",
-  "DataTransfer",
-  "Headers",
-  "Request",
-  "RequestInit",
-  "RequestMode",
-  "Response",
-  "Window",
-  "HtmlCanvasElement"
-]
-
-# [lib]
-# crate-type = ["cdylib"]
-
-[build-dependencies]
-bindgen = "0.66"
+web-sys = { version = "0.3", features = ["DragEvent", "DataTransfer", "File", "FileList", "HtmlCanvasElement", "HtmlInputElement"] }
