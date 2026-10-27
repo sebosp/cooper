@@ -1477,7 +1477,8 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 [[package]]
 name = "s2protocol"
 version = "4.0.0"
-source = "git+https://github.com/sebosp/s2protocol-rs?rev=7724f5b5482e75ba4f0477f79125d8e7238d1d27#7724f5b5482e75ba4f0477f79125d8e7238d1d27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8708bffea3886c99d1f04df785853292be8cea504277ca6a8663dd18bff6003b"
 dependencies = [
  "chrono",
  "colored",

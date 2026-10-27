@@ -7,7 +7,7 @@ description = "Online SC2Replay analyser, the replays are read in the browser"
 
 [dependencies]
 # The replays are read from the bytes of the dropped files, from_bytes is new in s2protocol 4.
-s2protocol = { git = "https://github.com/sebosp/s2protocol-rs", rev = "7724f5b5482e75ba4f0477f79125d8e7238d1d27", default-features = false, features = ["tracing_off"] }
+s2protocol = { version = "4.0.0", default-features = false, features = ["tracing_off"] }
 
 # The web application, the analysis of the replays is tested natively.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
