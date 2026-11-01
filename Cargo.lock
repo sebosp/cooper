@@ -1169,9 +1169,9 @@ dependencies = [
 
 [[package]]
 name = "nom-mpq"
-version = "2.0.11"
+version = "2.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6837ee482b1277db7a6d21e7da9e759927573b2cb8062742adaa80b104ca16ec"
+checksum = "b2c659c6278e787541623aeefa16b78c305681f5abb9e21b7dec1bdb9291e4e9"
 dependencies = [
  "bzip2-rs",
  "convert_case",
@@ -1476,13 +1476,12 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "s2protocol"
-version = "4.0.0"
+version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8708bffea3886c99d1f04df785853292be8cea504277ca6a8663dd18bff6003b"
+checksum = "1e82894e298d887fc0cbf4e01aeb17c787d29d73a117acd6c6acbeeafcefc044"
 dependencies = [
  "chrono",
  "colored",
- "convert_case",
  "futures",
  "include_dir",
  "nom",
@@ -1491,6 +1490,7 @@ dependencies = [
  "serde",
  "serde-xml-rs",
  "serde_json",
+ "serde_mpq",
  "sha256",
  "thiserror 2.0.21",
  "tracing",
@@ -1575,6 +1575,31 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serde_mpq"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7680758b5e96705237b450fe0150e2cf35e7bd2ff01241fc9f655736ac23e418"
+dependencies = [
+ "colored",
+ "nom",
+ "serde",
+ "serde_mpq_derive",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
+name = "serde_mpq_derive"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5417c0df7c689426e69eedb27d990a6fd059fa59a9263c77c26b4d60aa57dbb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
