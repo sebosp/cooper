@@ -1169,9 +1169,9 @@ dependencies = [
 
 [[package]]
 name = "nom-mpq"
-version = "2.0.12"
+version = "2.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2c659c6278e787541623aeefa16b78c305681f5abb9e21b7dec1bdb9291e4e9"
+checksum = "83539f6661d8e50e389759455b0b80e9855737d22eb9ff7152e9faa6f3eb11f1"
 dependencies = [
  "bzip2-rs",
  "convert_case",
@@ -1476,9 +1476,9 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "s2protocol"
-version = "5.0.0"
+version = "5.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e82894e298d887fc0cbf4e01aeb17c787d29d73a117acd6c6acbeeafcefc044"
+checksum = "3205bee000886609ac1cb47fb42d130255b2ec1b52b11b4808e0657c8eb645be"
 dependencies = [
  "chrono",
  "colored",
