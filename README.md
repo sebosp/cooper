@@ -15,6 +15,10 @@ Exarch). For each replay:
 - The units and structures each player lost.
 - The chat.
 
+![The example replay: the players, their APM and the charts of the game](docs/screenshots/replay.png)
+
+![The build orders of both players, with the game time of each unit, structure, morph and upgrade](docs/screenshots/build_orders.png)
+
 ## Running
 
 ```sh
