@@ -52,9 +52,6 @@ const BUILD_MORPHS: [&str; 15] = [
     "Roach",
 ];
 
-/// Units that die without a killer when they turn into something else, they are not losses.
-const MORPH_SOURCES: [&str; 3] = ["Drone", "HighTemplar", "DarkTemplar"];
-
 /// Dummies, creep tumors, sprays and the like, they are not part of the game of the players.
 fn is_noise(name: &str) -> bool {
     NOT_PRODUCED.contains(&name)
@@ -339,10 +336,9 @@ pub fn analyze(file_name: &str, contents: &[u8]) -> Result<ReplayAnalysis, Strin
                         ReplayTrackerEvent::UnitDied(died),
                         UnitChangeHint::Unregistered { killed, .. },
                     ) => {
-                        let has_killer = died.killer_unit_tag_index.is_some();
-                        if is_noise(&killed.name)
-                            || (!has_killer && MORPH_SOURCES.contains(&killed.name.as_str()))
-                        {
+                        // A drone that becomes a building, a larva that hatches or a MULE whose time
+                        // ran out die too, they are not losses (s2protocol 6.1.0 `cause`).
+                        if !died.cause.is_loss() || is_noise(&killed.name) {
                             continue;
                         }
                         if let Some(idx) = unit_player(&killed) {
